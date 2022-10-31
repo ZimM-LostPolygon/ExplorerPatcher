@@ -31,12 +31,16 @@
 #define STARTUI_SB_NAME "StartUI"
 #define STARTUI_SB_0 "StartUI::SystemListPolicyProvider::GetMaximumFrequentApps"
 #define STARTUI_SB_CNT 1
+#define EXPLORER_SB_NAME "explorer"
+#define EXPLORER_SB_0 "CTaskBtnGroup::_DrawBar"
+#define EXPLORER_SB_CNT 1
 #pragma pack(push, 1)
 typedef struct symbols_addr
 {
     DWORD twinui_pcshell_PTRS[TWINUI_PCSHELL_SB_CNT];
     DWORD startdocked_PTRS[STARTDOCKED_SB_CNT];
     DWORD startui_PTRS[STARTUI_SB_CNT];
+    DWORD explorer_PTRS[EXPLORER_SB_CNT];
 } symbols_addr;
 #pragma pack(pop)
 

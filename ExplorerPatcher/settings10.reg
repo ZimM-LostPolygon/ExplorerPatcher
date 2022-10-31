@@ -59,6 +59,8 @@
 ;x 3 Centered with Start button
 ;x 7 Centered with Start button, at screen edge when full
 "MMOldTaskbarAl"=dword:00000000
+;b Remove the open app indicator bar
+"TaskbarRemoveBarUnderOpenItems"=dword:00000000
 [HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
 ;c 3 Combine taskbar icons on primary taskbar
 ;x 0 Always combine (default)

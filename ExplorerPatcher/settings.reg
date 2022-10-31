@@ -85,6 +85,8 @@
 ;x 1 Combine when taskbar is full
 ;x 2 Never combine (default)
 "MMTaskbarGlomLevel"=dword:00000002
+;b Remove the open app indicator bar
+"TaskbarRemoveBarUnderOpenItems"=dword:00000000
 [HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
 ;c 2 Taskbar icon size
 ;x 1 Small

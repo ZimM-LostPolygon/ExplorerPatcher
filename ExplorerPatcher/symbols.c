@@ -21,6 +21,9 @@ const char* startdocked_SN[STARTDOCKED_SB_CNT] = {
 const char* startui_SN[STARTUI_SB_CNT] = {
     STARTUI_SB_0
 };
+const char* explorer_SN[EXPLORER_SB_CNT] = {
+    EXPLORER_SB_0
+};
 
 const wchar_t DownloadSymbolsXML[] =
 L"<toast scenario=\"reminder\" "
@@ -537,8 +540,103 @@ DWORD DownloadSymbols(DownloadSymbolsParams* params)
         if (hKey) RegCloseKey(hKey);
     }
 
-
-
+    ZeroMemory(hash, sizeof(WCHAR) * 100);
+    ZeroMemory(wszPath, sizeof(WCHAR) * 100);
+    char explorer_sb_exe[MAX_PATH];
+    ZeroMemory(
+        explorer_sb_exe,
+        (MAX_PATH) * sizeof(char)
+    );
+    GetWindowsDirectoryA(
+        explorer_sb_exe,
+        MAX_PATH
+    );
+    strcat_s(
+        explorer_sb_exe,
+        MAX_PATH,
+        "\\"
+    );
+    strcat_s(
+        explorer_sb_exe,
+        MAX_PATH,
+        EXPLORER_SB_NAME
+    );
+    strcat_s(
+        explorer_sb_exe,
+        MAX_PATH,
+        ".exe"
+    );
+    GetWindowsDirectoryW(wszPath, MAX_PATH);
+    wcscat_s(wszPath, MAX_PATH, L"\\" _T(EXPLORER_SB_NAME) L".exe");
+    ComputeFileHash(wszPath, hash, 100);
+    printf("[Symbols] Downloading symbols for \"%s\" (\"%s\")...\n", explorer_sb_exe, hash);
+    if (VnDownloadSymbols(
+        NULL,
+        explorer_sb_exe,
+        szSettingsPath,
+        MAX_PATH
+    ))
+    {
+        printf("[Symbols] Symbols for \"%s\" are not available - unable to download.\n", explorer_sb_exe);
+        printf("[Symbols] Please refer to \"https://github.com/valinet/ExplorerPatcher/wiki/Symbols\" for more information.\n");
+        if (params->bVerbose)
+        {
+            FreeLibraryAndExitThread(
+                hModule,
+                6
+            );
+        }
+        return 6;
+    }
+    printf("[Symbols] Reading symbols...\n");
+    if (VnGetSymbols(
+        szSettingsPath,
+        symbols_PTRS.explorer_PTRS,
+        explorer_SN,
+        EXPLORER_SB_CNT
+    ))
+    {
+        printf("[Symbols] Failure in reading symbols for \"%s\".\n", explorer_sb_exe);
+        if (params->bVerbose)
+        {
+            FreeLibraryAndExitThread(
+                hModule,
+                7
+            );
+        }
+        return 7;
+    }
+    RegCreateKeyExW(
+        HKEY_CURRENT_USER,
+        TEXT(REGPATH_STARTMENU) L"\\" TEXT(EXPLORER_SB_NAME),
+        0,
+        NULL,
+        REG_OPTION_NON_VOLATILE,
+        KEY_WRITE,
+        NULL,
+        &hKey,
+        &dwDisposition
+    );
+    if (!hKey || hKey == INVALID_HANDLE_VALUE)
+    {
+        if (params->bVerbose)
+        {
+            FreeLibraryAndExitThread(
+                hModule,
+                8
+            );
+        }
+        return 8;
+    }
+    RegSetValueExW(
+        hKey,
+        TEXT(EXPLORER_SB_0),
+        0,
+        REG_DWORD,
+        &(symbols_PTRS.explorer_PTRS[0]),
+        sizeof(DWORD)
+    );
+    if (hKey) RegCloseKey(hKey);
 
     if (rovi.dwBuildNumber >= 18362)
     {
@@ -1229,6 +1327,27 @@ BOOL LoadSymbols(symbols_addr* symbols_PTRS, HMODULE hModule)
         }
     }
 
+    RegCreateKeyExW(
+        HKEY_CURRENT_USER,
+        TEXT(REGPATH_STARTMENU) L"\\" TEXT(EXPLORER_SB_NAME),
+        0,
+        NULL,
+        REG_OPTION_NON_VOLATILE,
+        KEY_READ,
+        NULL,
+        &hKey,
+        &dwDisposition
+    );
+    RegQueryValueExW(
+        hKey,
+        TEXT(EXPLORER_SB_0),
+        0,
+        NULL,
+        &(symbols_PTRS->explorer_PTRS[0]),
+        &dwSize
+    );
+    if (hKey) RegCloseKey(hKey);
+
     BOOL bNeedToDownload = FALSE;
     if (IsWindows11())
     {
@@ -1245,7 +1364,7 @@ BOOL LoadSymbols(symbols_addr* symbols_PTRS, HMODULE hModule)
     }
     else
     {
-        if (!symbols_PTRS->twinui_pcshell_PTRS[0] || !symbols_PTRS->twinui_pcshell_PTRS[2] || !symbols_PTRS->twinui_pcshell_PTRS[3])
+        if (!symbols_PTRS->twinui_pcshell_PTRS[0] || !symbols_PTRS->twinui_pcshell_PTRS[2] || !symbols_PTRS->twinui_pcshell_PTRS[3] || !symbols_PTRS->explorer_PTRS[0])
         {
             bNeedToDownload = TRUE;
         }

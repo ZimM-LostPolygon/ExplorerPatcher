@@ -152,6 +152,7 @@ DWORD dwUndeadStartCorner = FALSE;
 DWORD dwOldTaskbarAl = 0b110;
 DWORD dwMMOldTaskbarAl = 0b110;
 DWORD dwTaskbarSmallIcons = FALSE;
+BOOL bTaskbarRemoveBarUnderOpenItems = FALSE;
 DWORD dwShowTaskViewButton = FALSE;
 DWORD dwSearchboxTaskbarMode = FALSE;
 DWORD dwTaskbarDa = FALSE;
@@ -1060,6 +1061,14 @@ void ToggleLauncherTipContextMenu()
 #endif
 #pragma endregion
 
+#pragma region "explorer Hooks"
+
+static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC a2, void* a3, void* a4) = NULL;
+void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC a2, void* a3, void* a4)
+{
+}
+
+#pragma endregion
 
 #pragma region "windowsudk.shellcommon Hooks"
 
@@ -6966,6 +6975,15 @@ void WINAPI LoadSettings(LPARAM lParam)
         LeaveCriticalSection(&lock_epw);
 #endif
 
+        dwSize = sizeof(DWORD);
+        RegQueryValueExW(
+            hKey,
+            TEXT("TaskbarRemoveBarUnderOpenItems"),
+            0,
+            NULL,
+            &bTaskbarRemoveBarUnderOpenItems,
+            &dwSize
+        );
         dwTemp = TASKBARGLOMLEVEL_DEFAULT;
         dwSize = sizeof(DWORD);
         RegQueryValueExW(
@@ -10558,6 +10576,29 @@ DWORD Inject(BOOL bIsExplorer)
         if (IsOS(OS_ANYSERVER)) VnPatchIAT(hPeopleBand, "SHLWAPI.dll", (LPCSTR)437, PeopleBand_IsOS);
         VnPatchIAT(hPeopleBand, "api-ms-win-core-largeinteger-l1-1-0.dll", "MulDiv", PeopleBand_MulDivHook);
         printf("Setup peopleband functions done\n");
+    }
+
+    if (bTaskbarRemoveBarUnderOpenItems)
+    {
+        if (symbols_PTRS.explorer_PTRS[0] && symbols_PTRS.twinui_pcshell_PTRS[0] != 0xFFFFFFFF)
+        {
+            HANDLE hExplorer = GetModuleHandleW(NULL);
+
+            CTaskBtnGroup_DrawBarFunc = (INT64(*)(void*, HDC, void*, void*))
+                ((uintptr_t)hExplorer + symbols_PTRS.explorer_PTRS[0]);
+
+            rv = funchook_prepare(
+                funchook,
+                (void**)&CTaskBtnGroup_DrawBarFunc,
+                CTaskBtnGroup_DrawBarHook
+            );
+            if (rv != 0)
+            {
+                FreeLibraryAndExitThread(hModule, rv);
+                return rv;
+            }
+            printf("Setup taskbar open app indicator bar done\n");
+        }
     }
 
 
