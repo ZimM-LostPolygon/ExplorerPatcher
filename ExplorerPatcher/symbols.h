@@ -33,7 +33,8 @@
 #define STARTUI_SB_CNT 1
 #define EXPLORER_SB_NAME "explorer"
 #define EXPLORER_SB_0 "CTaskBtnGroup::_DrawBar"
-#define EXPLORER_SB_CNT 1
+#define EXPLORER_SB_1 "CTaskBtnGroup::_DrawBasePlate"
+#define EXPLORER_SB_CNT 2
 #pragma pack(push, 1)
 typedef struct symbols_addr
 {

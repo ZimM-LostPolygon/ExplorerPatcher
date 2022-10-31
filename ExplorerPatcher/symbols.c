@@ -22,7 +22,8 @@ const char* startui_SN[STARTUI_SB_CNT] = {
     STARTUI_SB_0
 };
 const char* explorer_SN[EXPLORER_SB_CNT] = {
-    EXPLORER_SB_0
+    EXPLORER_SB_0,
+    EXPLORER_SB_1,
 };
 
 const wchar_t DownloadSymbolsXML[] =
@@ -634,6 +635,14 @@ DWORD DownloadSymbols(DownloadSymbolsParams* params)
         0,
         REG_DWORD,
         &(symbols_PTRS.explorer_PTRS[0]),
+        sizeof(DWORD)
+    );
+    RegSetValueExW(
+        hKey,
+        TEXT(EXPLORER_SB_1),
+        0,
+        REG_DWORD,
+        &(symbols_PTRS.explorer_PTRS[1]),
         sizeof(DWORD)
     );
     if (hKey) RegCloseKey(hKey);
@@ -1346,6 +1355,14 @@ BOOL LoadSymbols(symbols_addr* symbols_PTRS, HMODULE hModule)
         &(symbols_PTRS->explorer_PTRS[0]),
         &dwSize
     );
+    RegQueryValueExW(
+        hKey,
+        TEXT(EXPLORER_SB_1),
+        0,
+        NULL,
+        &(symbols_PTRS->explorer_PTRS[1]),
+        &dwSize
+    );
     if (hKey) RegCloseKey(hKey);
 
     BOOL bNeedToDownload = FALSE;
@@ -1364,7 +1381,8 @@ BOOL LoadSymbols(symbols_addr* symbols_PTRS, HMODULE hModule)
     }
     else
     {
-        if (!symbols_PTRS->twinui_pcshell_PTRS[0] || !symbols_PTRS->twinui_pcshell_PTRS[2] || !symbols_PTRS->twinui_pcshell_PTRS[3] || !symbols_PTRS->explorer_PTRS[0])
+        if (!symbols_PTRS->twinui_pcshell_PTRS[0] || !symbols_PTRS->twinui_pcshell_PTRS[2] || !symbols_PTRS->twinui_pcshell_PTRS[3] || 
+            !symbols_PTRS->explorer_PTRS[0] || !symbols_PTRS->explorer_PTRS[1])
         {
             bNeedToDownload = TRUE;
         }

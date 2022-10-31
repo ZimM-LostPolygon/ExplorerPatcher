@@ -1063,9 +1063,40 @@ void ToggleLauncherTipContextMenu()
 
 #pragma region "explorer Hooks"
 
-static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC a2, void* a3, void* a4) = NULL;
-void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC a2, void* a3, void* a4)
+typedef struct {
+    char __unknown[36];
+    RECT rect_1;
+    RECT rect_2;
+    RECT rect_3;
+    RECT rect_4;
+    RECT rect_5;
+} BUTTONRENDERINFO;
+
+typedef struct {
+    char __unknown_1;
+    char __unknown_2;
+    char active_state;
+} BUTTONRENDERINFOSTATES;
+
+static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
+void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
 {
+    BOOL is_active = button_render_info_states->active_state != 0;
+    if (is_active) {
+        CTaskBtnGroup_DrawBarFunc(_this, a2, button_render_info, button_render_info_states);
+    }
+}
+
+static void(*CTaskBtnGroup_DrawBasePlateFunc)(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
+void __stdcall CTaskBtnGroup_DrawBasePlateHook(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
+{
+    const int shift = 4;
+    button_render_info->rect_1.bottom += shift;
+    button_render_info->rect_2.bottom += shift;
+    button_render_info->rect_3.bottom += shift;
+    button_render_info->rect_4.bottom += shift;
+    button_render_info->rect_5.bottom += shift;
+    CTaskBtnGroup_DrawBasePlateFunc(_this, a2, button_render_info, button_render_info_states);
 }
 
 #pragma endregion
@@ -10580,7 +10611,8 @@ DWORD Inject(BOOL bIsExplorer)
 
     if (bTaskbarRemoveBarUnderOpenItems)
     {
-        if (symbols_PTRS.explorer_PTRS[0] && symbols_PTRS.twinui_pcshell_PTRS[0] != 0xFFFFFFFF)
+        if (symbols_PTRS.explorer_PTRS[0] && symbols_PTRS.twinui_pcshell_PTRS[0] != 0xFFFFFFFF &&
+            symbols_PTRS.explorer_PTRS[1] && symbols_PTRS.twinui_pcshell_PTRS[1] != 0xFFFFFFFF)
         {
             HANDLE hExplorer = GetModuleHandleW(NULL);
 
@@ -10591,6 +10623,20 @@ DWORD Inject(BOOL bIsExplorer)
                 funchook,
                 (void**)&CTaskBtnGroup_DrawBarFunc,
                 CTaskBtnGroup_DrawBarHook
+            );
+            if (rv != 0)
+            {
+                FreeLibraryAndExitThread(hModule, rv);
+                return rv;
+            }
+
+            CTaskBtnGroup_DrawBasePlateFunc = (INT64(*)(void*, HDC, void*, void*))
+                ((uintptr_t)hExplorer + symbols_PTRS.explorer_PTRS[1]);
+
+            rv = funchook_prepare(
+                funchook,
+                (void**)&CTaskBtnGroup_DrawBasePlateFunc,
+                CTaskBtnGroup_DrawBasePlateHook
             );
             if (rv != 0)
             {
