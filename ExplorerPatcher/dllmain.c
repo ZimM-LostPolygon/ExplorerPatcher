@@ -1064,6 +1064,7 @@ void ToggleLauncherTipContextMenu()
 #pragma endregion
 
 #pragma region "explorer Hooks"
+#ifdef _WIN64
 
 #pragma pack(push,1)
 
@@ -1109,6 +1110,7 @@ static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC hDC, BUTTONRENDERINFO* 
 void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC hDC, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
 {
     //printf("is_active = %d, is_hovered = %d, __unknown_1 = %d, __unknown_2 = %d, __unknown_3 = %d, progress = %d\n", button_render_info_states->is_active, button_render_info_states->is_hovered, button_render_info_states->__unknown_1, button_render_info_states->__unknown_2, button_render_info_states->__unknown_3, button_render_info_states->progress);
+    
     BOOL isIndeterminateProgress = button_render_info_states->progress == 0xFFFF;
     if (button_render_info_states->is_active || isIndeterminateProgress) {
         CTaskBtnGroup_DrawBarFunc(_this, hDC, button_render_info, button_render_info_states);
@@ -1121,15 +1123,15 @@ void __stdcall CTaskBtnGroup_DrawBasePlateHook(void* _this, HDC hDC, BUTTONRENDE
     //printf("= dwLastTaskbarOrientation = %d\n", dwLastTaskbarOrientation);
 
     const int baseBarSize = 2;
-    UINT dpiX, dpiY;
+    HMONITOR hMonitor = MonitorFromWindow(WindowFromDC(hDC), MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
     HRESULT hr = GetDpiForMonitor(
-        MonitorFromWindow(WindowFromDC(hDC), MONITOR_DEFAULTTOPRIMARY),
+        hMonitor,
         MDT_DEFAULT,
         &dpiX,
         &dpiY
     );
     dwLastTaskbarOpenAppBarSize = MulDiv(baseBarSize, dpiY, 96);
-
     ExtendCTaskBtnGroupRectIntoBar(&button_render_info->rects_1[2], dwLastTaskbarOpenAppBarSize);
 
     CTaskBtnGroup_DrawBasePlateFunc(_this, hDC, button_render_info, button_render_info_states);
@@ -1150,6 +1152,8 @@ size_t __stdcall CTaskBtnGroup_GetMirroredStuckPlaceHook(void* _this)
     dwLastTaskbarOrientation = result;
     return result;
 }
+
+#endif
 
 #pragma endregion
 
