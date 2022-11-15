@@ -159,6 +159,8 @@ DWORD dwTaskbarDa = FALSE;
 DWORD bDisableSpotlightIcon = FALSE;
 DWORD dwSpotlightDesktopMenuMask = 0;
 DWORD dwSpotlightUpdateSchedule = 0;
+DWORD dwLastTaskbarOrientation = 0;
+DWORD dwLastTaskbarOpenAppBarSize;
 int Code = 0;
 HRESULT InjectStartFromExplorer();
 void InvokeClockFlyout();
@@ -1063,40 +1065,90 @@ void ToggleLauncherTipContextMenu()
 
 #pragma region "explorer Hooks"
 
-typedef struct {
-    char __unknown[36];
-    RECT rect_1;
-    RECT rect_2;
-    RECT rect_3;
-    RECT rect_4;
-    RECT rect_5;
-} BUTTONRENDERINFO;
+#pragma pack(push,1)
 
 typedef struct {
     char __unknown_1;
     char __unknown_2;
-    char active_state;
+    char is_pinned;
+    char __unknown_4;
+    RECT rects_1[6];
+} BUTTONRENDERINFO;
+    
+typedef struct {
+    char is_hovered;
+    char __unknown_1;
+    char is_active;
+    char __unknown_2;
+    char is_mouse_down;
+    char __unknown_3;
+    char __unknown_4[6];
+    DWORD progress;
 } BUTTONRENDERINFOSTATES;
 
-static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
-void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
-{
-    BOOL is_active = button_render_info_states->active_state != 0;
-    if (is_active) {
-        CTaskBtnGroup_DrawBarFunc(_this, a2, button_render_info, button_render_info_states);
+#pragma pack(pop)
+
+void ExtendCTaskBtnGroupRectIntoBar(RECT* rect, int barSize) {
+    switch (dwLastTaskbarOrientation) {
+    case 0:
+        rect->left -= barSize;
+        break;
+    case 1:
+        rect->top -= barSize;
+        break;
+    case 2:
+        rect->right += barSize;
+        break;
+    case 3:
+        rect->bottom += barSize;
+        break;
     }
 }
 
-static void(*CTaskBtnGroup_DrawBasePlateFunc)(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
-void __stdcall CTaskBtnGroup_DrawBasePlateHook(void* _this, HDC a2, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
+static void(*CTaskBtnGroup_DrawBarFunc)(void* _this, HDC hDC, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
+void __stdcall CTaskBtnGroup_DrawBarHook(void* _this, HDC hDC, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
 {
-    const int shift = 4;
-    button_render_info->rect_1.bottom += shift;
-    button_render_info->rect_2.bottom += shift;
-    button_render_info->rect_3.bottom += shift;
-    button_render_info->rect_4.bottom += shift;
-    button_render_info->rect_5.bottom += shift;
-    CTaskBtnGroup_DrawBasePlateFunc(_this, a2, button_render_info, button_render_info_states);
+    //printf("is_active = %d, is_hovered = %d, __unknown_1 = %d, __unknown_2 = %d, __unknown_3 = %d, progress = %d\n", button_render_info_states->is_active, button_render_info_states->is_hovered, button_render_info_states->__unknown_1, button_render_info_states->__unknown_2, button_render_info_states->__unknown_3, button_render_info_states->progress);
+    BOOL isIndeterminateProgress = button_render_info_states->progress == 0xFFFF;
+    if (button_render_info_states->is_active || isIndeterminateProgress) {
+        CTaskBtnGroup_DrawBarFunc(_this, hDC, button_render_info, button_render_info_states);
+    }
+}
+
+static void(*CTaskBtnGroup_DrawBasePlateFunc)(void* _this, HDC hDC, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states) = NULL;
+void __stdcall CTaskBtnGroup_DrawBasePlateHook(void* _this, HDC hDC, BUTTONRENDERINFO* button_render_info, BUTTONRENDERINFOSTATES* button_render_info_states)
+{
+    //printf("= dwLastTaskbarOrientation = %d\n", dwLastTaskbarOrientation);
+
+    const int baseBarSize = 2;
+    UINT dpiX, dpiY;
+    HRESULT hr = GetDpiForMonitor(
+        MonitorFromWindow(WindowFromDC(hDC), MONITOR_DEFAULTTOPRIMARY),
+        MDT_DEFAULT,
+        &dpiX,
+        &dpiY
+    );
+    dwLastTaskbarOpenAppBarSize = MulDiv(baseBarSize, dpiY, 96);
+
+    ExtendCTaskBtnGroupRectIntoBar(&button_render_info->rects_1[2], dwLastTaskbarOpenAppBarSize);
+
+    CTaskBtnGroup_DrawBasePlateFunc(_this, hDC, button_render_info, button_render_info_states);
+}
+
+static RECT*(*CTaskBtnGroup_GetProgressAreaFunc)(void* _this, RECT* result_rect, BUTTONRENDERINFO* button_render_info) = NULL;
+RECT* __stdcall CTaskBtnGroup_GetProgressAreaHook(void* _this, RECT* result_rect, BUTTONRENDERINFO* button_render_info)
+{
+    RECT* result = CTaskBtnGroup_GetProgressAreaFunc(_this, result_rect, button_render_info);
+    ExtendCTaskBtnGroupRectIntoBar(result, dwLastTaskbarOpenAppBarSize);
+    return result;
+}
+
+static size_t(*CTaskBtnGroup_GetMirroredStuckPlaceFunc)(void* _this) = NULL;
+size_t __stdcall CTaskBtnGroup_GetMirroredStuckPlaceHook(void* _this)
+{
+    size_t result = CTaskBtnGroup_GetMirroredStuckPlaceFunc(_this);
+    dwLastTaskbarOrientation = result;
+    return result;
 }
 
 #pragma endregion
@@ -10612,7 +10664,9 @@ DWORD Inject(BOOL bIsExplorer)
     if (bTaskbarRemoveBarUnderOpenItems)
     {
         if (symbols_PTRS.explorer_PTRS[0] && symbols_PTRS.twinui_pcshell_PTRS[0] != 0xFFFFFFFF &&
-            symbols_PTRS.explorer_PTRS[1] && symbols_PTRS.twinui_pcshell_PTRS[1] != 0xFFFFFFFF)
+            symbols_PTRS.explorer_PTRS[1] && symbols_PTRS.twinui_pcshell_PTRS[1] != 0xFFFFFFFF &&
+            symbols_PTRS.explorer_PTRS[2] && symbols_PTRS.twinui_pcshell_PTRS[2] != 0xFFFFFFFF &&
+            symbols_PTRS.explorer_PTRS[3] && symbols_PTRS.twinui_pcshell_PTRS[3] != 0xFFFFFFFF)
         {
             HANDLE hExplorer = GetModuleHandleW(NULL);
 
@@ -10643,6 +10697,35 @@ DWORD Inject(BOOL bIsExplorer)
                 FreeLibraryAndExitThread(hModule, rv);
                 return rv;
             }
+
+            CTaskBtnGroup_GetProgressAreaFunc = (RECT*(*)(void*, RECT*, BUTTONRENDERINFO*))
+                ((uintptr_t)hExplorer + symbols_PTRS.explorer_PTRS[2]);
+
+            rv = funchook_prepare(
+                funchook,
+                (void**)&CTaskBtnGroup_GetProgressAreaFunc,
+                CTaskBtnGroup_GetProgressAreaHook
+            );
+            if (rv != 0)
+            {
+                FreeLibraryAndExitThread(hModule, rv);
+                return rv;
+            }
+
+            CTaskBtnGroup_GetMirroredStuckPlaceFunc = (size_t(*)(void*))
+                ((uintptr_t)hExplorer + symbols_PTRS.explorer_PTRS[3]);
+
+            rv = funchook_prepare(
+                funchook,
+                (void**)&CTaskBtnGroup_GetMirroredStuckPlaceFunc,
+                CTaskBtnGroup_GetMirroredStuckPlaceHook
+            );
+            if (rv != 0)
+            {
+                FreeLibraryAndExitThread(hModule, rv);
+                return rv;
+            }
+
             printf("Setup taskbar open app indicator bar done\n");
         }
     }
